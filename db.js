@@ -1,11 +1,13 @@
 const Sequelize = require('sequelize');
 const jwt = require('jsonwebtoken')
+const bcrypt = require("bcrypt")
 const { STRING } = Sequelize;
 const config = {
     logging: false
 };
 
 const tokenSecret = 'ahdfsyufgyusguyg';
+const saltRounds = 10;
 
 if (process.env.LOGGING) {
     delete config.logging;
@@ -40,13 +42,16 @@ User.byToken = async (token) => {
 };
 
 User.authenticate = async ({ username, password }) => {
+
     const user = await User.findOne({
         where: {
-            username,
-            password
+            username
         }
     });
-    if (user) {
+
+    const correctPW = await bcrypt.compare(password, user.password)
+
+    if (correctPW) {
         // return user.id;
         //put JWT SIGN here
         const token = jwt.sign({ userId: user.id, username: user.username }, tokenSecret)
@@ -58,6 +63,7 @@ User.authenticate = async ({ username, password }) => {
     throw error;
 };
 
+
 const syncAndSeed = async () => {
     await conn.sync({ force: true });
     const credentials = [
@@ -65,6 +71,11 @@ const syncAndSeed = async () => {
         { username: 'moe', password: 'moe_pw' },
         { username: 'larry', password: 'larry_pw' }
     ];
+    User.beforeCreate(async function(user, options) {
+        const hashedPW = await bcrypt.hash(user.password, saltRounds)
+        user.password = hashedPW;
+        return user
+    })
     const [lucy, moe, larry] = await Promise.all(
         credentials.map(credential => User.create(credential))
     );
